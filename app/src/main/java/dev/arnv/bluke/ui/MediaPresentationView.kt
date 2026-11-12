@@ -1,5 +1,8 @@
 package dev.arnv.bluke.ui
 
+import androidx.compose.ui.unit.coerceIn
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -86,7 +89,10 @@ private val RemoteContentColor = Color(0xFFF4F4F6)
 
 internal enum class MultimediaPosture {
     LANDSCAPE,
+    /** Phone held upright while the screen stays locked to landscape: content is drawn rotated. */
     PORTRAIT_HELD,
+    /** The screen itself is portrait. */
+    UPRIGHT,
 }
 
 internal fun multimediaPostureForDegrees(
@@ -181,9 +187,19 @@ internal fun MediaPresentationView(
         }
     }
 
-    DisposableEffect(context, postureOverride) {
+    val isWindowPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    // When the screen follows the phone, rotating it gives a real portrait window. The rotated
+    // "held upright" layout is only needed while the screen is locked to landscape.
+    val isLockedLandscape = KeyboardOrientation.fromPreference(
+        sharedPrefs.getString(KEYBOARD_ORIENTATION_PREFERENCE, null),
+    ) == KeyboardOrientation.LANDSCAPE
+
+    DisposableEffect(context, postureOverride, isLockedLandscape) {
         if (postureOverride != null) {
             posture = postureOverride
+            onDispose {}
+        } else if (!isLockedLandscape) {
+            posture = MultimediaPosture.LANDSCAPE
             onDispose {}
         } else {
             val stabilizer = MultimediaPostureStabilizer(posture)
@@ -223,7 +239,7 @@ internal fun MediaPresentationView(
         }
     }
 
-    val resolvedPosture = postureOverride ?: posture
+    val resolvedPosture = postureOverride ?: if (isWindowPortrait) MultimediaPosture.UPRIGHT else posture
     val cycleSensitivity = {
         sensitivity = nextTouchpadSpeed(sensitivity)
         sharedPrefs.edit { putFloat("touchpad_sensitivity", sensitivity) }
@@ -249,7 +265,31 @@ internal fun MediaPresentationView(
         .background(RemoteCanvasColor)
         .testTag("media_presentation_view_root")
 
-    if (resolvedPosture == MultimediaPosture.LANDSCAPE) {
+    if (resolvedPosture == MultimediaPosture.UPRIGHT) {
+        Column(modifier = rootModifier) {
+            MultimediaTopBar(
+                btManager = btManager,
+                onClose = onClose,
+                launchMode = launchMode,
+                onModeChange = onModeChange,
+                sharedPrefs = sharedPrefs,
+                isConnected = isConnected,
+                sensitivity = sensitivity,
+                onSensitivityChange = cycleSensitivity,
+                scrollSensitivity = scrollSensitivity,
+                onScrollSensitivityChange = cycleScrollSensitivity,
+                isVibrationEnabled = isVibrationEnabled,
+                onToggleVibration = toggleVibration,
+            )
+            MultimediaUprightCanvas(
+                btManager = btManager,
+                sensitivity = sensitivity,
+                scrollSensitivity = scrollSensitivity,
+                triggerVibration = ::triggerVibration,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+        }
+    } else if (resolvedPosture == MultimediaPosture.LANDSCAPE) {
         Column(modifier = rootModifier) {
             MultimediaTopBar(
                 btManager = btManager,
@@ -296,6 +336,46 @@ internal fun MediaPresentationView(
                 triggerVibration = ::triggerVibration,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
+        }
+    }
+}
+
+/** Portrait screen: buttons on top, then slide controls, touchpad and mouse buttons. */
+@Composable
+private fun MultimediaUprightCanvas(
+    btManager: BluetoothKeyboardManager,
+    sensitivity: Float,
+    scrollSensitivity: Float,
+    triggerVibration: (Long) -> Unit,
+    modifier: Modifier,
+) {
+    BoxWithConstraints(modifier = modifier.padding(12.dp)) {
+        val gap = 8.dp
+        // Two blocks of three columns, with a wider gap between the blocks.
+        val buttonSize = ((maxWidth - gap * 7) / 6).coerceIn(44.dp, 64.dp)
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MultimediaButtonDeck(
+                btManager = btManager,
+                posture = MultimediaPosture.UPRIGHT,
+                buttonWidth = buttonSize,
+                buttonHeight = buttonSize,
+                horizontalGap = gap,
+                verticalGap = gap,
+                triggerVibration = triggerVibration,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+            SlideNavigationRow(btManager, Modifier.fillMaxWidth().height(48.dp), gap, triggerVibration)
+            MultimediaTouchpad(
+                btManager,
+                sensitivity,
+                scrollSensitivity,
+                triggerVibration,
+                Modifier.weight(1f).fillMaxWidth(),
+            )
+            MouseButtonRow(btManager, Modifier.fillMaxWidth().height(52.dp), gap, triggerVibration)
         }
     }
 }
@@ -382,10 +462,10 @@ private fun MultimediaButtonDeck(
         horizontalArrangement = Arrangement.spacedBy(horizontalGap * 3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val mediaRows = if (posture == MultimediaPosture.LANDSCAPE) {
-            landscapeMediaRows
-        } else {
+        val mediaRows = if (posture == MultimediaPosture.PORTRAIT_HELD) {
             portraitHeldMediaRows
+        } else {
+            landscapeMediaRows
         }
         Column(verticalArrangement = Arrangement.spacedBy(verticalGap)) {
             mediaRows.forEach { row ->
@@ -765,22 +845,22 @@ private fun MultimediaUprightBar(
 ) {
     Column(
         modifier = Modifier
-            .width(42.dp)
+            .width(56.dp)
             .fillMaxHeight()
             .background(Color.Black.copy(alpha = 0.45f))
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         UprightToolbarButton("Close Multimedia", onClose) {
-            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(13.dp))
+            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         UprightToolbarButton("Switch input mode", onModeChange) {
-            Icon(Icons.Default.Mouse, null, tint = Color.White, modifier = Modifier.size(13.dp))
+            Icon(Icons.Default.Mouse, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Box(
             Modifier
-                .size(8.dp)
+                .size(10.dp)
                 .clip(CircleShape)
                 .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800))
                 .semantics {
@@ -794,8 +874,8 @@ private fun MultimediaUprightBar(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Speed, null, tint = Color.White, modifier = Modifier.size(10.dp))
-                Text("${sensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Speed, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Text("${sensitivity}x", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         UprightToolbarButton("Scroll sensitivity ${scrollSensitivity}x", onScrollSensitivityChange) {
@@ -803,8 +883,8 @@ private fun MultimediaUprightBar(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.KeyboardArrowUp, null, tint = Color.White, modifier = Modifier.size(10.dp))
-                Text("${scrollSensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.KeyboardArrowUp, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Text("${scrollSensitivity}x", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         UprightToolbarButton(
@@ -815,7 +895,7 @@ private fun MultimediaUprightBar(
                 Icons.Default.Vibration,
                 null,
                 tint = if (isVibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f),
-                modifier = Modifier.size(13.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -830,10 +910,10 @@ private fun UprightToolbarButton(
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .size(34.dp)
+            .size(44.dp)
             .semantics { contentDescription = description },
         color = Color.White.copy(alpha = 0.15f),
-        shape = RoundedCornerShape(7.dp),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Box(
             modifier = Modifier.graphicsLayer { rotationZ = -90f },
@@ -867,25 +947,15 @@ private fun MultimediaTopBar(
     } catch (_: SecurityException) {
         if (isConnected) "Host" else "No Host"
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(42.dp)
-            .background(Color.Black.copy(alpha = 0.45f))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ToolbarPill(onClick = onClose) {
-                Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Close", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+    SessionToolbar(
+        leading = {
+            ToolbarButton(onClick = onClose, onClickLabel = "Close multimedia") {
+                ToolbarIcon(Icons.Default.Close, "Close")
+                ToolbarLabel("Close")
             }
-            ToolbarPill(
+            ToolbarButton(
+                onClickLabel = "Next input mode",
+                onLongClickLabel = "Configure input mode cycle",
                 onClick = {
                     val enabled = sharedPrefs.enabledInputModes()
                     val index = enabled.indexOfFirst { it.id == launchMode }.coerceAtLeast(0)
@@ -895,57 +965,30 @@ private fun MultimediaTopBar(
                     context.startActivity(Intent(context, QuickCycleActivity::class.java))
                 },
             ) {
-                Icon(Icons.Default.Mouse, "Switch mode", tint = Color.White, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Multimedia", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                ToolbarIcon(Icons.Default.Mouse, "Switch mode")
+                ToolbarLabel("Multimedia")
             }
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800))
-                    .semantics {
-                        contentDescription = if (isConnected) "Host connected" else "Host offline"
-                    },
-            )
-            Text(hostLabel, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            ToolbarHostChip(isConnected = isConnected, hostName = hostLabel)
             ReconnectHostButton(btManager, iconOnly = true)
-            if (!isConnected) {
-                Text("[offline]", color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
+        },
+        trailing = {
+            ToolbarButton(onClick = onSensitivityChange, onClickLabel = "Next pointer speed") {
+                ToolbarIcon(Icons.Default.Speed, "Sensitivity")
+                ToolbarLabel("${sensitivity}x")
             }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ToolbarPill(onClick = onSensitivityChange) {
-                Icon(Icons.Default.Speed, "Sensitivity", tint = Color.White, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("${sensitivity}x", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            ToolbarButton(onClick = onScrollSensitivityChange, onClickLabel = "Next scroll speed") {
+                ToolbarIcon(Icons.Default.KeyboardArrowUp, "Scroll speed")
+                ToolbarLabel("${scrollSensitivity}x")
             }
-            ToolbarPill(onClick = onScrollSensitivityChange) {
-                Icon(Icons.Default.KeyboardArrowUp, "Scroll speed", tint = Color.White, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("${scrollSensitivity}x", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            ToolbarIconButton(onClick = onToggleVibration) {
+                ToolbarIcon(
+                    Icons.Default.Vibration,
+                    if (isVibrationEnabled) "Disable vibration" else "Enable vibration",
+                    tint = if (isVibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f),
+                )
             }
-            Surface(
-                onClick = onToggleVibration,
-                modifier = Modifier.size(28.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = Color.White.copy(alpha = 0.15f),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Default.Vibration,
-                        if (isVibrationEnabled) "Disable vibration" else "Enable vibration",
-                        tint = if (isVibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 private const val KEY_APPLICATION = 0x65
