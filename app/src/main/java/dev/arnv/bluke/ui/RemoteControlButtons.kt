@@ -232,27 +232,3 @@ internal fun RemoteIconHoldButton(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun ToolbarPill(
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-    content: @Composable RowScope.() -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.15f))
-            .then(
-                if (onLongClick == null) {
-                    Modifier.clickable(onClick = onClick)
-                } else {
-                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                },
-            )
-            .padding(horizontal = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content,
-    )
-}

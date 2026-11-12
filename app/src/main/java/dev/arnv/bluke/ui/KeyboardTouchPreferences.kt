@@ -47,7 +47,7 @@ enum class KeyboardStyle(val preferenceValue: String, val displayName: String) {
 
     companion object {
         fun fromPreference(value: String?): KeyboardStyle =
-            entries.firstOrNull { it.preferenceValue == value } ?: MECHANICAL
+            entries.firstOrNull { it.preferenceValue == value } ?: MINIMAL
     }
 }
 

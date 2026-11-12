@@ -492,17 +492,13 @@ fun HomeScreen(
     }
 
     // Set the screen orientation for the current mode.
-    LaunchedEffect(isKeyboardActive, launchMode, keyboardOrientation) {
+    LaunchedEffect(isKeyboardActive, keyboardOrientation) {
         val activity = context as? Activity ?: return@LaunchedEffect
         if (isKeyboardActive) {
             try {
-                // Keyboard mode follows the rotation setting; the other modes stay landscape.
+                // Every input mode follows the rotation setting and has a portrait layout.
                 @Suppress("SourceLockedOrientationActivity")
-                activity.requestedOrientation = if (launchMode == InputMode.KEYBOARD.id) {
-                    keyboardOrientation.activityOrientation
-                } else {
-                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                }
+                activity.requestedOrientation = keyboardOrientation.activityOrientation
             } catch (e: Exception) {
                 Log.e("HomeScreen", "Error setting orientation: ${e.message}")
             }
@@ -923,496 +919,228 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.SpaceBetween,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // 1. Sleek Frosted Glass Top Settings Bar (KBSim Web Style Toggles Toolbar)
-                        // Too wide for an upright phone, so it scrolls sideways in portrait.
-                        val toolbarScroll = rememberScrollState()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .background(Color.Black.copy(alpha = 0.45f))
-                                .then(if (isPortrait) Modifier.horizontalScroll(toolbarScroll) else Modifier)
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Left Section: Exit, Connection status and Reconnect Button
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Exit Button (Pill style to match other buttons)
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable { isKeyboardActive = false }
-                                        .padding(horizontal = 8.dp)
-                                        .testTag("exit_keyboard_btn"),
-                                    verticalAlignment = Alignment.CenterVertically
+                        // 1. Top toolbar. Touch-sized buttons; it scrolls sideways when it doesn't fit.
+                        SessionToolbar(
+                            leading = {
+                                ToolbarButton(
+                                    onClick = { isKeyboardActive = false },
+                                    onClickLabel = "Close keyboard",
+                                    modifier = Modifier.testTag("exit_keyboard_btn"),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Exit",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(10.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Close",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    ToolbarIcon(Icons.Default.Close, "Exit")
+                                    ToolbarLabel("Close")
                                 }
 
-                                // Rotating Mode Switcher
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .combinedClickable(
-                                            onClickLabel = "Next input mode",
-                                            onLongClickLabel = "Configure input mode cycle",
-                                            onClick = {
-                                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
-                                                val currentIndexInEnabled = enabledModes.indexOf(launchMode)
-                                                val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
-                                                val nextMode = enabledModes[nextIndex]
-                                                switchInputMode(nextMode)
-                                                if (isHapticsEnabled) {
-                                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                                                }
-                                            },
-                                            onLongClick = {
-                                                context.startActivity(Intent(context, QuickCycleActivity::class.java))
-                                            },
-                                        )
-                                        .padding(horizontal = 8.dp)
-                                        .testTag("keyboard_mode_cycle_btn"),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                // Rotating mode switcher
+                                ToolbarButton(
+                                    onClickLabel = "Next input mode",
+                                    onLongClickLabel = "Configure input mode cycle",
+                                    onClick = {
+                                        val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                        val currentIndexInEnabled = enabledModes.indexOf(launchMode)
+                                        val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
+                                        val nextMode = enabledModes[nextIndex]
+                                        switchInputMode(nextMode)
+                                        if (isHapticsEnabled) {
+                                            view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                    },
+                                    modifier = Modifier.testTag("keyboard_mode_cycle_btn"),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Keyboard,
-                                        contentDescription = "Switch Mode",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(11.dp)
-                                    )
-                                    Text(
-                                        text = "Keyboard Mode",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    ToolbarIcon(Icons.Default.Keyboard, "Switch Mode")
+                                    ToolbarLabel("Keyboard")
                                 }
 
-                                // Status LED and connection details
-                                val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
                                 // Use collected state (not .value) so UI reacts to changes from background
                                 val activeDevice = homeUiState.connectedDevice ?: lastConnectedDevice ?: btManager.getReconnectTarget()
-                                val deviceName = activeDevice?.name ?: "No Host"
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(statusLedColor)
-                                )
-                                
-                                Text(
-                                    text = deviceName,
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif
-                                )
-                                
-                                // Reconnect Button
+                                ToolbarHostChip(isConnected = isConnected, hostName = activeDevice?.name ?: "No Host")
+
                                 ReconnectHostButton(btManager)
 
                                 // Move the trackpad to the other side (landscape only)
                                 if (isKeyboardTrackpadEnabled && !isPortrait && !isHardwareKeyboardMode) {
+                                    ToolbarButton(
+                                        onClickLabel = "Move trackpad to the other side",
+                                        onClick = {
+                                            trackpadSide = trackpadSide.flipped()
+                                            sharedPrefs.edit {
+                                                putString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, trackpadSide.preferenceValue)
+                                            }
+                                        },
+                                        modifier = Modifier.testTag("swap_trackpad_side_btn"),
+                                    ) {
+                                        ToolbarIcon(Icons.Default.SwapHoriz, null)
+                                        ToolbarLabel("Trackpad")
+                                    }
+                                }
+                            },
+                            trailing = {
+                                // 1. Lock keys: each is its own touch target with an LED.
+                                @Composable
+                                fun LockKeyButton(label: String, active: Boolean, onToggle: () -> Unit) {
+                                    ToolbarButton(
+                                        onClick = onToggle,
+                                        onClickLabel = "Toggle $label lock",
+                                        horizontalPadding = 10.dp,
+                                    ) {
+                                        ToolbarLed(on = active)
+                                        ToolbarLabel(label, color = if (active) Color.White else SessionToolbarDefaults.MutedContent)
+                                    }
+                                }
+                                fun toggleLock(usage: Int, flip: () -> Unit) {
+                                    if (isConnected) {
+                                        btManager.sendKey(usage, true)
+                                        btManager.sendKey(usage, false)
+                                        if (lockSyncMode == "device") flip()
+                                    } else {
+                                        flip()
+                                    }
+                                }
+                                LockKeyButton("CAPS", isCapsLockActive) { toggleLock(0x39) { isCapsLockActive = !isCapsLockActive } }
+                                LockKeyButton("NUM", isNumLockActive) { toggleLock(0x53) { isNumLockActive = !isNumLockActive } }
+                                LockKeyButton("SCR", isScrollLockActive) { toggleLock(0x47) { isScrollLockActive = !isScrollLockActive } }
+
+                                // Phone keyboard Alt layer (hardware keyboard mode only)
+                                if (isHardwareKeyboardMode) {
                                     Row(
                                         modifier = Modifier
-                                            .height(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.White.copy(alpha = 0.15f))
-                                            .clickable(onClickLabel = "Move trackpad to the other side") {
-                                                trackpadSide = trackpadSide.flipped()
-                                                sharedPrefs.edit {
-                                                    putString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, trackpadSide.preferenceValue)
-                                                }
-                                            }
-                                            .padding(horizontal = 8.dp)
-                                            .testTag("swap_trackpad_side_btn"),
+                                            .height(SessionToolbarDefaults.ButtonHeight)
+                                            .padding(horizontal = 6.dp)
+                                            .testTag("phone_alt_indicator"),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.SwapHoriz,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(12.dp)
+                                        ToolbarLed(
+                                            on = phoneLayerState != LatchState.OFF,
+                                            onColor = if (phoneLayerState == LatchState.LOCKED) {
+                                                SessionToolbarDefaults.LedOn
+                                            } else {
+                                                SessionToolbarDefaults.LedOn.copy(alpha = 0.5f)
+                                            },
                                         )
-                                        Text(
-                                            text = "Trackpad",
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
+                                        ToolbarLabel(
+                                            "ALT",
+                                            color = if (phoneLayerState != LatchState.OFF) Color.White else SessionToolbarDefaults.MutedContent,
                                         )
                                     }
                                 }
-                            }
 
-                            // Right Section: lock LEDs indicators, configuration pills, and mute button
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                // 1. Keyboard Status Lock LEDs Panel
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .padding(horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    // CAPS
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable {
-                                                if (isConnected) {
-                                                    btManager.sendKey(0x39, true)
-                                                    btManager.sendKey(0x39, false)
-                                                    if (lockSyncMode == "device") {
-                                                        isCapsLockActive = !isCapsLockActive
-                                                    }
-                                                } else {
-                                                    isCapsLockActive = !isCapsLockActive
-                                                }
-                                            }
-                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isCapsLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                        )
-                                        Text(
-                                            text = "CAPS",
-                                            color = if (isCapsLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.SansSerif,
-                                            style = androidx.compose.ui.text.TextStyle(
-                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                            )
-                                        )
-                                    }
-                                    
-                                    // NUM
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable {
-                                                if (isConnected) {
-                                                    btManager.sendKey(0x53, true)
-                                                    btManager.sendKey(0x53, false)
-                                                    if (lockSyncMode == "device") {
-                                                        isNumLockActive = !isNumLockActive
-                                                    }
-                                                } else {
-                                                    isNumLockActive = !isNumLockActive
-                                                }
-                                            }
-                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isNumLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                        )
-                                        Text(
-                                            text = "NUM",
-                                            color = if (isNumLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.SansSerif,
-                                            style = androidx.compose.ui.text.TextStyle(
-                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                            )
-                                        )
-                                    }
-                                    
-                                    // SCR
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable {
-                                                if (isConnected) {
-                                                    btManager.sendKey(0x47, true)
-                                                    btManager.sendKey(0x47, false)
-                                                    if (lockSyncMode == "device") {
-                                                        isScrollLockActive = !isScrollLockActive
-                                                    }
-                                                } else {
-                                                    isScrollLockActive = !isScrollLockActive
-                                                }
-                                            }
-                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isScrollLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                        )
-                                        Text(
-                                            text = "SCR",
-                                            color = if (isScrollLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            fontFamily = FontFamily.SansSerif,
-                                            style = androidx.compose.ui.text.TextStyle(
-                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                            )
-                                        )
-                                    }
-
-                                    // Phone keyboard Alt layer (hardware keyboard mode only)
-                                    if (isHardwareKeyboardMode) {
-                                        val altOn = phoneLayerState != LatchState.OFF
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            modifier = Modifier
-                                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                .testTag("phone_alt_indicator")
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(5.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        when (phoneLayerState) {
-                                                            LatchState.LOCKED -> Color(0xFF39FF14)
-                                                            LatchState.ONE_SHOT -> Color(0xFF39FF14).copy(alpha = 0.5f)
-                                                            LatchState.OFF -> Color.White.copy(alpha = 0.15f)
-                                                        }
-                                                    )
-                                            )
-                                            Text(
-                                                text = "ALT",
-                                                color = if (altOn) Color.White else Color.White.copy(alpha = 0.4f),
-                                                fontSize = 8.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = FontFamily.SansSerif,
-                                                style = androidx.compose.ui.text.TextStyle(
-                                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // 2. Layout Selector Pill (the hardware keyboard strip has a fixed layout)
+                                // 2. Layout selector (the hardware keyboard strip has a fixed layout)
                                 if (!isHardwareKeyboardMode) {
-                                    Row(
-                                        modifier = Modifier
-                                            .height(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.White.copy(alpha = 0.15f))
-                                            .combinedClickable(
-                                                onClickLabel = "Next keyboard layout",
-                                                onLongClickLabel = "Configure keyboard layout cycle",
-                                                onClick = {
-                                                    val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
-                                                    val enabledLayouts = if (savedSet == null) {
-                                                        KeyboardGeometry.entries
-                                                    } else {
-                                                        KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
-                                                    }.ifEmpty { listOf(selectedGeometry) }
-                                                    val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
-                                                    val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
-                                                    selectedGeometry = enabledLayouts[nextIndex]
-                                                    sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
-                                                    vibrateKeyPress()
-                                                },
-                                                onLongClick = {
-                                                    context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
-                                                },
-                                            )
-                                            .padding(horizontal = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    ToolbarButton(
+                                        onClickLabel = "Next keyboard layout",
+                                        onLongClickLabel = "Configure keyboard layout cycle",
+                                        onClick = {
+                                            val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
+                                            val enabledLayouts = if (savedSet == null) {
+                                                KeyboardGeometry.entries
+                                            } else {
+                                                KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
+                                            }.ifEmpty { listOf(selectedGeometry) }
+                                            val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
+                                            val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
+                                            selectedGeometry = enabledLayouts[nextIndex]
+                                            sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
+                                            vibrateKeyPress()
+                                        },
+                                        onLongClick = {
+                                            context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
+                                        },
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Keyboard,
-                                            contentDescription = "Layout",
-                                            tint = Color.White.copy(alpha = 0.9f),
-                                            modifier = Modifier.size(10.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = selectedGeometry.displayName,
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.widthIn(max = 90.dp),
-                                        )
+                                        ToolbarIcon(Icons.Default.Keyboard, "Layout")
+                                        ToolbarLabel(selectedGeometry.displayName, maxWidth = 120.dp)
                                     }
                                 }
 
                                 // 3. PC / Mac modifier keys
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .combinedClickable(
-                                            onClickLabel = "Switch to ${keyboardHostOs.toggled().displayName} keys",
-                                            onLongClickLabel = "Keyboard settings",
-                                            onClick = {
-                                                // Held or latched modifiers change meaning, so let go of them first.
-                                                resetKeyboardInput()
-                                                keyboardHostOs = keyboardHostOs.toggled()
-                                                sharedPrefs.edit { putString(KEYBOARD_HOST_OS_PREFERENCE, keyboardHostOs.preferenceValue) }
-                                                vibrateKeyPress()
-                                            },
-                                            onLongClick = {
-                                                context.startActivity(Intent(context, dev.arnv.bluke.KeyboardSettingsActivity::class.java))
-                                            },
-                                        )
-                                        .padding(horizontal = 8.dp)
-                                        .testTag("host_os_toggle"),
-                                    verticalAlignment = Alignment.CenterVertically
+                                ToolbarButton(
+                                    onClickLabel = "Switch to ${keyboardHostOs.toggled().displayName} keys",
+                                    onLongClickLabel = "Keyboard settings",
+                                    onClick = {
+                                        // Held or latched modifiers change meaning, so let go of them first.
+                                        resetKeyboardInput()
+                                        keyboardHostOs = keyboardHostOs.toggled()
+                                        sharedPrefs.edit { putString(KEYBOARD_HOST_OS_PREFERENCE, keyboardHostOs.preferenceValue) }
+                                        vibrateKeyPress()
+                                    },
+                                    onLongClick = {
+                                        context.startActivity(Intent(context, dev.arnv.bluke.KeyboardSettingsActivity::class.java))
+                                    },
+                                    modifier = Modifier.testTag("host_os_toggle"),
                                 ) {
-                                    Icon(
-                                        imageVector = if (keyboardHostOs == KeyboardHostOs.MAC) Icons.Default.LaptopMac else Icons.Default.LaptopWindows,
-                                        contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.9f),
-                                        modifier = Modifier.size(10.dp)
+                                    ToolbarIcon(
+                                        if (keyboardHostOs == KeyboardHostOs.MAC) Icons.Default.LaptopMac else Icons.Default.LaptopWindows,
+                                        null,
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = keyboardHostOs.shortName,
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    )
+                                    ToolbarLabel(keyboardHostOs.shortName)
                                 }
 
-                                // 4. Keyboard Theme Selector Pill
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .combinedClickable(
-                                            onClickLabel = "Next keyboard theme",
-                                            onLongClickLabel = "Customize keyboard themes",
-                                            onClick = {
-                                                val availableThemes = keyboardThemeRepository.allThemes()
-                                                val savedThemeIds = sharedPrefs.getStringSet(
-                                                    CYCLE_KEYBOARD_THEMES_PREFERENCE,
-                                                    null,
-                                                )
-                                                val enabledThemes = if (savedThemeIds == null) {
-                                                    availableThemes
-                                                } else {
-                                                    availableThemes.filter { theme -> theme.id in savedThemeIds }
-                                                }.ifEmpty { listOf(selectedKeyboardTheme) }
-                                                val currentIndex = enabledThemes.indexOfFirst {
-                                                    it.id == selectedKeyboardTheme.id
-                                                }
-                                                val nextIndex = if (currentIndex < 0) {
-                                                    0
-                                                } else {
-                                                    (currentIndex + 1) % enabledThemes.size
-                                                }
-                                                selectedKeyboardTheme = enabledThemes[nextIndex]
-                                                keyboardThemeRepository.selectTheme(selectedKeyboardTheme.id)
-                                                vibrateKeyPress()
-                                            },
-                                            onLongClick = {
-                                                context.startActivity(
-                                                    Intent(context, KeyboardThemesActivity::class.java),
-                                                )
-                                            },
+                                // 4. Keyboard theme selector
+                                ToolbarButton(
+                                    onClickLabel = "Next keyboard theme",
+                                    onLongClickLabel = "Customize keyboard themes",
+                                    onClick = {
+                                        val availableThemes = keyboardThemeRepository.allThemes()
+                                        val savedThemeIds = sharedPrefs.getStringSet(
+                                            CYCLE_KEYBOARD_THEMES_PREFERENCE,
+                                            null,
                                         )
-                                        .padding(horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        val enabledThemes = if (savedThemeIds == null) {
+                                            availableThemes
+                                        } else {
+                                            availableThemes.filter { theme -> theme.id in savedThemeIds }
+                                        }.ifEmpty { listOf(selectedKeyboardTheme) }
+                                        val currentIndex = enabledThemes.indexOfFirst {
+                                            it.id == selectedKeyboardTheme.id
+                                        }
+                                        val nextIndex = if (currentIndex < 0) {
+                                            0
+                                        } else {
+                                            (currentIndex + 1) % enabledThemes.size
+                                        }
+                                        selectedKeyboardTheme = enabledThemes[nextIndex]
+                                        keyboardThemeRepository.selectTheme(selectedKeyboardTheme.id)
+                                        vibrateKeyPress()
+                                    },
+                                    onLongClick = {
+                                        context.startActivity(
+                                            Intent(context, KeyboardThemesActivity::class.java),
+                                        )
+                                    },
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(8.dp)
+                                            .size(14.dp)
                                             .clip(CircleShape)
                                             .background(Color(selectedKeyboardTheme.accentStyle.backgroundArgb))
-                                            .border(0.5.dp, Color.White, CircleShape)
+                                            .border(1.dp, Color.White, CircleShape)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = selectedKeyboardTheme.name,
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 80.dp),
-                                    )
+                                    ToolbarLabel(selectedKeyboardTheme.name, maxWidth = 110.dp)
                                 }
 
-                                // 5. Key vibration toggle (Squarish, height 28dp, radius 6dp)
+                                // 5. Key vibration toggle
                                 if (keyPressVibrator.isAvailable) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.White.copy(alpha = 0.15f))
-                                            .clickable(
-                                                onClickLabel = if (isKeyVibrationEnabled) "Turn off key vibration" else "Turn on key vibration",
-                                            ) {
-                                                isKeyVibrationEnabled = !isKeyVibrationEnabled
-                                                sharedPrefs.edit { putBoolean(KEY_VIBRATION_PREFERENCE, isKeyVibrationEnabled) }
-                                                vibrateKeyPress()
-                                            }
-                                            .testTag("key_vibration_toggle"),
-                                        contentAlignment = Alignment.Center
+                                    ToolbarIconButton(
+                                        onClickLabel = if (isKeyVibrationEnabled) "Turn off key vibration" else "Turn on key vibration",
+                                        onClick = {
+                                            isKeyVibrationEnabled = !isKeyVibrationEnabled
+                                            sharedPrefs.edit { putBoolean(KEY_VIBRATION_PREFERENCE, isKeyVibrationEnabled) }
+                                            vibrateKeyPress()
+                                        },
+                                        modifier = Modifier.testTag("key_vibration_toggle"),
                                     ) {
                                         if (isKeyVibrationEnabled) {
-                                            Icon(
-                                                imageVector = Icons.Default.Vibration,
-                                                contentDescription = "Key vibration on",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
+                                            ToolbarIcon(Icons.Default.Vibration, "Key vibration on")
                                         } else {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_vibration_off),
-                                                contentDescription = "Key vibration off",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
+                                            ToolbarIcon(painterResource(R.drawable.ic_vibration_off), "Key vibration off")
                                         }
                                     }
                                 }
-                            }
-                        }
+                            },
+                        )
 
                         // 2. Keyboard, optionally with a trackpad above it (portrait) or beside it (landscape)
                         val isMinimal = keyboardStyle == KeyboardStyle.MINIMAL

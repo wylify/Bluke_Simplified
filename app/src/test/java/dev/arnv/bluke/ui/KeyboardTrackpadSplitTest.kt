@@ -114,6 +114,6 @@ class KeyboardTrackpadSplitTest {
         val height = keyboardHeightForWidth(364.dp, rows, keyAspect = 1.25f, style = KeyboardStyle.MINIMAL)
         assertEquals(36f * 1.25f * 5f + 4f, height.value, 0.01f)
         assertEquals(TrackpadSide.LEFT, TrackpadSide.RIGHT.flipped())
-        assertEquals(KeyboardStyle.MECHANICAL, KeyboardStyle.fromPreference(null))
+        assertEquals(KeyboardStyle.MINIMAL, KeyboardStyle.fromPreference(null))
     }
 }

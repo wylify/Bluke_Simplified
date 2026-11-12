@@ -1,5 +1,6 @@
 package dev.arnv.bluke.ui
 
+import android.content.res.Configuration
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -133,313 +135,155 @@ fun TouchpadView(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             
-            // 1. Sleek Frosted Settings Bar for Touchpad (replaces standard Keyboard bar)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(38.dp)
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Left side actions: close and switch modes
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Exit Button
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable { onClose() }
-                            .padding(horizontal = 8.dp)
-                            .testTag("exit_touchpad_btn"),
-                        verticalAlignment = Alignment.CenterVertically
+            val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+
+            // 1. Touchpad toolbar. Touch-sized buttons; it scrolls sideways when it doesn't fit.
+            SessionToolbar(
+                leading = {
+                    ToolbarButton(
+                        onClick = onClose,
+                        onClickLabel = "Close touchpad",
+                        modifier = Modifier.testTag("exit_touchpad_btn"),
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Exit",
-                            tint = Color.White,
-                            modifier = Modifier.size(10.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Close",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarIcon(Icons.Default.Close, "Exit")
+                        ToolbarLabel("Close")
                     }
 
-                    // Rotating Mode Switcher (cycles active connection modes)
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .combinedClickable(
-                                onClickLabel = "Next input mode",
-                                onLongClickLabel = "Configure input mode cycle",
-                                onClick = {
-                                    val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
-                                    val currentIndexInEnabled = enabledModes.indexOf(launchMode)
-                                    val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
-                                    val nextMode = enabledModes[nextIndex]
-                                    onModeChange(nextMode)
-                                    triggerVibration(25)
-                                },
-                                onLongClick = {
-                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
-                                },
-                            )
-                            .padding(horizontal = 8.dp)
-                            .testTag("touchpad_mode_cycle_btn"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Rotating mode switcher (cycles active connection modes)
+                    ToolbarButton(
+                        onClickLabel = "Next input mode",
+                        onLongClickLabel = "Configure input mode cycle",
+                        onClick = {
+                            val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                            val currentIndexInEnabled = enabledModes.indexOf(launchMode)
+                            val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
+                            val nextMode = enabledModes[nextIndex]
+                            onModeChange(nextMode)
+                            triggerVibration(25)
+                        },
+                        onLongClick = {
+                            context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                        },
+                        modifier = Modifier.testTag("touchpad_mode_cycle_btn"),
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Mouse,
-                            contentDescription = "Switch Mode",
-                            tint = Color.White,
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Text(
-                            text = "Touchpad Mode",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarIcon(Icons.Default.Mouse, "Switch Mode")
+                        ToolbarLabel("Touchpad")
                     }
 
                     // Connection status
                     val connectedDevNow by btManager.connectedDevice.collectAsState()
-                    val isConnected = connectedDevNow != null
-                    val deviceName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host"
-                    val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(statusLedColor)
+                    ToolbarHostChip(
+                        isConnected = connectedDevNow != null,
+                        hostName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host",
                     )
-                    Text(
-                        text = deviceName,
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                }
-
-                ReconnectHostButton(btManager, iconOnly = true)
-
-                // Right side configurations: Trackpad Button layout, Numpad LED toggle, Case Color, Sensitivity, Vibration haptics
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                modifierPosition = modifierPosition.next()
-                                sharedPrefs.edit {
-                                    putString(
-                                        TOUCHPAD_MODIFIER_POSITION_PREFERENCE,
-                                        modifierPosition.preferenceValue,
-                                    )
-                                }
-                                triggerVibration(15)
+                    ReconnectHostButton(btManager, iconOnly = true)
+                },
+                trailing = {
+                    ToolbarButton(
+                        onClickLabel = "Move modifier keys",
+                        onClick = {
+                            modifierPosition = modifierPosition.next()
+                            sharedPrefs.edit {
+                                putString(
+                                    TOUCHPAD_MODIFIER_POSITION_PREFERENCE,
+                                    modifierPosition.preferenceValue,
+                                )
                             }
-                            .padding(horizontal = 8.dp)
-                            .testTag("touchpad_modifier_position"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            triggerVibration(15)
+                        },
+                        modifier = Modifier.testTag("touchpad_modifier_position"),
                     ) {
-                        Icon(Icons.Default.Keyboard, "Modifier key position", tint = Color.White, modifier = Modifier.size(12.dp))
-                        Text(
-                            modifierPosition.displayName,
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        ToolbarIcon(Icons.Default.Keyboard, "Modifier key position")
+                        ToolbarLabel(modifierPosition.displayName)
                     }
 
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                showNumpadLed = !showNumpadLed
-                                triggerVibration(30)
-                            }
-                            .padding(horizontal = 8.dp)
-                            .testTag("led_numpad_toggle"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ToolbarButton(
+                        onClickLabel = if (showNumpadLed) "Hide numpad" else "Show numpad",
+                        onClick = {
+                            showNumpadLed = !showNumpadLed
+                            triggerVibration(30)
+                        },
+                        modifier = Modifier.testTag("led_numpad_toggle"),
                     ) {
                         if (showNumpadLed) {
-                            Icon(
-                                imageVector = Icons.Default.Dialpad,
-                                contentDescription = "LED Pad",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            ToolbarIcon(Icons.Default.Dialpad, "LED Pad")
                         } else {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_dialpad_off),
-                                contentDescription = "LED Pad",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            ToolbarIcon(painterResource(id = R.drawable.ic_dialpad_off), "LED Pad")
                         }
-                        Text(
-                            text = "Numpad",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarLabel("Numpad")
                     }
 
-                    // Button Partition Mode selector
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val values = TrackpadButtonMode.entries
-                                val nextMode = values[(buttonMode.ordinal + 1) % values.size]
-                                buttonMode = nextMode
-                                triggerVibration(15)
-                            }
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Button partition mode selector
+                    ToolbarButton(
+                        onClickLabel = "Next button layout",
+                        onClick = {
+                            val values = TrackpadButtonMode.entries
+                            val nextMode = values[(buttonMode.ordinal + 1) % values.size]
+                            buttonMode = nextMode
+                            triggerVibration(15)
+                        },
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Mouse,
-                            contentDescription = "Button Mode",
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = buttonMode.displayName,
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarIcon(Icons.Default.Mouse, "Button Mode")
+                        ToolbarLabel(buttonMode.displayName)
                     }
 
-                    // Mouse Sensitivity pill rotation (1.0x, 1.5x, 2.0x, 2.5x)
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val currentSens = nextTouchpadSpeed(sensitivity)
-                                sensitivity = currentSens
-                                sharedPrefs.edit { putFloat("touchpad_sensitivity", currentSens) }
-                                triggerVibration(15)
-                            }
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Pointer sensitivity rotation (1.0x, 1.5x, 2.0x, 2.5x)
+                    ToolbarButton(
+                        onClickLabel = "Next pointer speed",
+                        onClick = {
+                            val currentSens = nextTouchpadSpeed(sensitivity)
+                            sensitivity = currentSens
+                            sharedPrefs.edit { putFloat("touchpad_sensitivity", currentSens) }
+                            triggerVibration(15)
+                        },
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Speed,
-                            contentDescription = "Sensitivity",
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = "${sensitivity}x",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarIcon(Icons.Default.Speed, "Sensitivity")
+                        ToolbarLabel("${sensitivity}x")
                     }
 
-                    // Scroll Speed pill rotation (1.0x, 1.5x, 2.0x, 2.5x)
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val currentScroll = nextTouchpadSpeed(scrollSensitivity)
-                                scrollSensitivity = currentScroll
-                                sharedPrefs.edit { putFloat("touchpad_scroll_sensitivity", currentScroll) }
-                                triggerVibration(15)
-                            }
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Scroll speed rotation (1.0x, 1.5x, 2.0x, 2.5x)
+                    ToolbarButton(
+                        onClickLabel = "Next scroll speed",
+                        onClick = {
+                            val currentScroll = nextTouchpadSpeed(scrollSensitivity)
+                            scrollSensitivity = currentScroll
+                            sharedPrefs.edit { putFloat("touchpad_scroll_sensitivity", currentScroll) }
+                            triggerVibration(15)
+                        },
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardDoubleArrowUp,
-                            contentDescription = "Scroll Speed",
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Text(
-                            text = "${scrollSensitivity}x",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        ToolbarIcon(Icons.Default.KeyboardDoubleArrowUp, "Scroll Speed")
+                        ToolbarLabel("${scrollSensitivity}x")
                     }
 
-                    // Vibration Toggle
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val active = !isVibrationEnabled
-                                isVibrationEnabled = active
-                                sharedPrefs.edit { putBoolean("touchpad_vibration_enabled", active) }
-                                if (active) {
-                                    triggerVibration(50)
-                                }
+                    // Vibration toggle
+                    ToolbarIconButton(
+                        onClickLabel = if (isVibrationEnabled) "Turn off vibration" else "Turn on vibration",
+                        onClick = {
+                            val active = !isVibrationEnabled
+                            isVibrationEnabled = active
+                            sharedPrefs.edit { putBoolean("touchpad_vibration_enabled", active) }
+                            if (active) {
+                                triggerVibration(50)
                             }
-                            .testTag("vibration_toggle"),
-                        contentAlignment = Alignment.Center
+                        },
+                        modifier = Modifier.testTag("vibration_toggle"),
                     ) {
                         if (isVibrationEnabled) {
-                            Icon(
-                                imageVector = Icons.Default.Vibration,
-                                contentDescription = "Haptics Vibration",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            ToolbarIcon(Icons.Default.Vibration, "Haptics Vibration")
                         } else {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_vibration_off),
-                                contentDescription = "Haptics Vibration",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            ToolbarIcon(painterResource(id = R.drawable.ic_vibration_off), "Haptics Vibration")
                         }
                     }
-                }
-            }
+                },
+            )
 
             // 2. Large Glass-like Centered Touchpad Surface
             Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = if (isPortrait) 12.dp else 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isPortrait) 8.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (modifierPosition == TouchpadModifierPosition.LEFT) {

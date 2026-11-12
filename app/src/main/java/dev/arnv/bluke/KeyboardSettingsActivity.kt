@@ -306,7 +306,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
                             title = "Rotation",
                             items = listOf(
                                 SettingsItemData(
-                                    title = "Keyboard rotation",
+                                    title = "Screen rotation",
                                     subtitle = orientation.displayName,
                                     icon = { Icon(Icons.Default.ScreenRotation, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { dialog = KeyboardDialog.ORIENTATION },
@@ -381,8 +381,8 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         onDismiss = { dialog = null },
                     )
                     KeyboardDialog.ORIENTATION -> ChoiceDialog(
-                        title = "Keyboard rotation",
-                        explanation = "Applies to Keyboard mode. Touchpad, Gamepad and Multimedia stay landscape.",
+                        title = "Screen rotation",
+                        explanation = "Applies to every input mode: Keyboard, Touchpad, Gamepad and Multimedia.",
                         choices = KeyboardOrientation.entries.map { it.displayName },
                         selectedIndex = KeyboardOrientation.entries.indexOf(orientation),
                         onSelect = { index ->
