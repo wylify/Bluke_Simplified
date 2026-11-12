@@ -1,0 +1,4 @@
+• Hardware keyboard mode: on phones with a keyboard, like the Clicks Communicator or Unihertz Titan 2 Elite, or with a keyboard attached, type on the phone's own keys
+• On-screen letters are hidden; a slim strip keeps Esc, Tab, Ctrl, Win/Cmd, Alt/Opt, arrows and F1–F12, with a trackpad above it
+• The phone's Alt key types the symbols printed on its keys
+• Turns on automatically; change it in Settings → Keyboard
