@@ -1,0 +1,5 @@
+• Touchpad, Gamepad and Multimedia now work in portrait, with layouts made for an upright phone
+• Bigger, easier-to-tap buttons in the top bar of every mode
+• Caps, Num and Scroll Lock each get their own button
+• The keyboard uses the Minimal style unless you've picked one
+• Settings → Keyboard → Screen rotation now applies to all modes

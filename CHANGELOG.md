@@ -3,6 +3,15 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [1.1.5] - 2026-11-12
+
+### Added
+- **Portrait for every mode:** Touchpad, Gamepad and Multimedia now turn upright with the phone, like the keyboard. Gamepad puts the shoulder buttons on top and the sticks at the bottom, under your thumbs. Multimedia stacks the media keys and arrows above a large touchpad. Layout edits made in Gamepad's Edit Layout are saved separately for portrait and landscape. The setting is now Settings → Keyboard → **Screen rotation** and applies to all modes; choose "Always landscape" to keep the old behavior.
+
+### Improved & Fixed
+- **Bigger toolbar buttons:** The bar at the top of every mode has larger buttons, icons and labels that are easier to hit. Caps, Num and Scroll Lock each get their own button, and the bar scrolls sideways when it doesn't fit.
+- **Minimal keyboard by default:** The keyboard now uses the Minimal style unless you've picked one. If you never chose a style, your keyboard switches to Minimal; pick Mechanical in Settings → Keyboard to go back.
+
 ## [1.1.4] - 2026-11-12
 
 ### Added
