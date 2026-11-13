@@ -37,6 +37,7 @@ import androidx.core.net.toUri
 import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
+import dev.arnv.bluke.ui.UpdateSettingsSection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.theme.getCookieShape
 
@@ -296,6 +297,8 @@ class AboutActivity : ComponentActivity() {
                                 }
                             }
                         }
+
+                        UpdateSettingsSection(currentVersion = BuildConfig.VERSION_NAME)
 
                         SettingsCardGroup(
                             title = "App",

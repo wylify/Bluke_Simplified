@@ -1,0 +1,4 @@
+• Optional update check: the app asks once whether to look for new releases on GitHub
+• Choose daily, every 3 days, weekly, every 2 weeks or monthly in Settings → About → Updates
+• New versions show a dialog; nothing downloads unless you tap Download
+• Off unless you agree, never runs in the background, and this is the app's only internet use

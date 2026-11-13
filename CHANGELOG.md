@@ -3,6 +3,11 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [1.1.6] - 2026-11-13
+
+### Added
+- **Update check (opt-in):** Settings → About → Updates can check GitHub for a new Simply Bluke release while the app is open: daily, every 3 days, weekly (default), every 2 weeks or monthly. When there is one, a dialog shows what's new and opens the APK download only if you tap Download. Skip hides that version. The first time you open the app, it asks whether to turn this on. It stays off unless you say yes, never runs in the background, and waits while a host is connected so it can't interrupt typing. This adds the Internet permission, used only for this check.
+
 ## [1.1.5] - 2026-11-12
 
 ### Added
