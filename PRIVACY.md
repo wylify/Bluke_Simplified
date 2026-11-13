@@ -1,6 +1,6 @@
 # Privacy Policy for Bluke
 
-Last updated: June 5, 2026
+Last updated: November 13, 2026
 
 **Bluke** ("the App") is committed to protecting your privacy. This Privacy Policy explains how the App handles user information and data.
 
@@ -13,6 +13,7 @@ Bluke operates as a standalone tool that turns your Android device into a Blueto
 * **No Personal Data Collection**: The App does not collect, store, transmit, or share any personal information, such as your name, email address, phone number, location, or device identifiers.
 * **No Keystroke Logging**: The App emulates a physical keyboard and processes your key taps locally and in real time. Your keystrokes are transmitted directly to your paired target device (e.g., PC, Mac, Smart TV) via Bluetooth HID and are **never** logged, saved, cached, or transmitted over the internet or to any third party.
 * **No Telemetry or Analytics**: The App does not contain any tracking software, telemetry, cookies, or third-party analytics libraries.
+* **Optional Update Check**: If you turn on "Check for updates" (the App asks once when first opened; it is off unless you agree), the App asks GitHub's public API for the latest Simply Bluke release while the App is open, at most once per interval you choose. The request contains no personal data or keystrokes; like any web request, GitHub sees your IP address. Nothing is downloaded unless you tap Download, which opens the link in your browser.
 
 ---
 
@@ -22,6 +23,7 @@ To function properly, Bluke requires the following system permissions on your An
 
 * **Bluetooth / Bluetooth Connect / Bluetooth Advertise / Bluetooth Scan**: Used exclusively to discover, pair with, and connect to host devices (PCs, Macs, TVs, etc.) as a Bluetooth HID device.
 * **Vibrate**: Used solely to provide tactile feedback (haptics) when keys are pressed.
+* **Internet**: Used only by the optional update check described above. It is never used while the update check is off, except when you tap "Check now".
 
 None of these permissions are used to collect data or track your behavior.
 
@@ -29,13 +31,13 @@ None of these permissions are used to collect data or track your behavior.
 
 ## 3. Data Transmission and Security
 
-All communication between the App and your paired device occurs directly over local Bluetooth connections. Because the App operates entirely offline and does not require internet permissions, there is no risk of your input data being intercepted or leaked over the network.
+All communication between the App and your paired device occurs directly over local Bluetooth connections. Your input never goes over the network. The only network request the App can make is the optional update check, which talks to api.github.com over HTTPS and sends nothing about you or your input.
 
 ---
 
 ## 4. Third-Party Services
 
-The App does not integrate with any third-party services, ad networks, or cloud databases. 
+The App does not integrate with any ad networks or cloud databases. The only third-party service it can contact is GitHub, and only when you turn on the update check or tap "Check now". GitHub's own privacy statement applies to that request.
 
 ---
 

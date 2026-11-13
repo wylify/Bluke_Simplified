@@ -18,6 +18,19 @@ import dev.arnv.bluke.bluetooth.BluetoothState
 import dev.arnv.bluke.data.migrateKeyboardCustomizationPreferences
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
+import dev.arnv.bluke.ui.UpdateAvailableDialog
+import dev.arnv.bluke.ui.UpdateOptInDialog
+import dev.arnv.bluke.update.GitHubRelease
+import dev.arnv.bluke.update.UpdateCheckResult
+import dev.arnv.bluke.update.UpdateChecker
+import dev.arnv.bluke.update.answerUpdateOptIn
+import dev.arnv.bluke.update.shouldAskUpdateOptIn
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.MutableStateFlow
 
 interface RemoteVolumeKeyHost {
     fun setRemoteVolumeKeyHandler(handler: ((keyCode: Int, isPressed: Boolean) -> Unit)?)
@@ -33,6 +46,7 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost, HardwareKeyHost {
     private lateinit var btManager: BluetoothKeyboardManager
     private var remoteVolumeKeyHandler: ((keyCode: Int, isPressed: Boolean) -> Unit)? = null
     private var hardwareKeyHandler: ((KeyEvent) -> Boolean)? = null
+    private val pendingUpdate = MutableStateFlow<GitHubRelease?>(null)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -97,9 +111,37 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost, HardwareKeyHost {
         }
         permissionLauncher.launch(permissions)
 
+        // Update check: only while the app is open, at most once per chosen interval, never in the background.
+        val updateChecker = UpdateChecker(sharedPrefs, BuildConfig.VERSION_NAME)
+        suspend fun checkForUpdate() {
+            val result = updateChecker.checkIfDue()
+            if (result is UpdateCheckResult.Available) pendingUpdate.value = result.release
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { checkForUpdate() }
+        }
+
         setContent {
             MyApplicationTheme {
                 HomeScreen(btManager = btManager)
+                var askOptIn by remember { mutableStateOf(sharedPrefs.shouldAskUpdateOptIn) }
+                val update by pendingUpdate.collectAsState()
+                val connectedHost by btManager.connectedDevice.collectAsState()
+                // Both dialogs are held while a host is connected so they can't land under a finger that is typing.
+                if (askOptIn && connectedHost == null) {
+                    UpdateOptInDialog { enable ->
+                        sharedPrefs.answerUpdateOptIn(enable)
+                        askOptIn = false
+                        if (enable) lifecycleScope.launch { checkForUpdate() }
+                    }
+                }
+                update?.takeIf { connectedHost == null && !askOptIn }?.let { release ->
+                    UpdateAvailableDialog(
+                        release = release,
+                        currentVersion = BuildConfig.VERSION_NAME,
+                        onDismiss = { pendingUpdate.value = null },
+                    )
+                }
             }
         }
     }
