@@ -14,6 +14,20 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -161,6 +175,10 @@ fun HomeScreen(
         val savedMode = sharedPrefs.getInt("launch_mode", InputMode.KEYBOARD.id)
         mutableIntStateOf(savedMode.takeIf(enabledModes::contains) ?: enabledModes.first())
     }
+    // Which session was open and where it was opened from, so closing it can play the opening
+    // wave in reverse back into the same button.
+    val lastSession = remember { LastSession() }
+    if (isKeyboardActive) SideEffect { lastSession.mode = InputMode.fromId(launchMode) }
 
     var devModeRefreshTrigger by remember { mutableIntStateOf(0) }
 
@@ -1272,214 +1290,327 @@ fun HomeScreen(
                 }
             }
         } else {
-            // Configuration & Setup Portrait Screen
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = stringResource(id = R.string.app_name),
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.clickable {
-                                        easterEggClicks++
-                                        if (easterEggClicks < 5) {
-                                            android.widget.Toast.makeText(context, "${5 - easterEggClicks} more clicks to activate", android.widget.Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            easterEggClicks = 0
-                                            val intent = Intent(Intent.ACTION_VIEW, "https://www.youtube.com/watch?v=dQw4w9WgXcQ".toUri())
-                                            context.startActivity(intent)
-                                        }
-                                    }
-                                )
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { 
-                                context.startActivity(Intent(context, dev.arnv.bluke.SettingsActivity::class.java))
-                            }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings")
-                            }
+            // Holding the mode button opens the "Scrub & Lift" mode picker (ModePicker.kt).
+            val modePicker = remember {
+                ModePickerState().apply {
+                    lastSession.mode?.let { closed ->
+                        val origin = if (lastSession.fromLaunchButton) {
+                            ModeWaveOrigin.Point(lastSession.launchButtonCenter)
+                        } else {
+                            ModeWaveOrigin.ModeButton
                         }
-                    )
+                        beginClosing(closed, origin)
+                    }
+                    lastSession.mode = null
                 }
-            ) { innerPadding ->
-                // Immersive Hub UI
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = innerPadding.calculateTopPadding())
-                        .background(MaterialTheme.colorScheme.background)
-                ) {
-                    if (btState.blocksInputLaunch()) {
-                        ProfileNotSupportedScreen(
-                            bluetoothState = btState,
-                            onEnableBluetooth = {
-                                btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
-                            },
-                            onRetry = btManager::retryBluetoothCapabilities
-                        )
-                    } else {
-                        var isPairedExpanded by rememberSaveable { mutableStateOf(true) }
-                        var isDiscoveredExpanded by rememberSaveable { mutableStateOf(true) }
-                        val connectedDeviceState = homeUiState.connectedDevice
+            }
+            val currentInputMode = InputMode.fromId(launchMode)
+            val previewInputMode = modePicker.previewMode ?: currentInputMode
+            fun pickerFeedback(feedback: ModePickerFeedback) {
+                if (isHapticsEnabled) view.modePickerHaptic(feedback)
+            }
+            fun preselectMode(mode: InputMode) {
+                launchMode = mode.id
+                sharedPrefs.edit { putInt("launch_mode", mode.id) }
+            }
+            fun openModeFromPicker(mode: InputMode, animate: Boolean) {
+                pickerFeedback(ModePickerFeedback.Confirm)
+                lastSession.fromLaunchButton = false
+                when {
+                    shouldShowGamepadGuide(mode.id, sharedPrefs.getBoolean("has_seen_gamepad_guide", false)) -> {
+                        // The guide's "Open gamepad" button selects and opens the mode.
+                        modePicker.dismiss()
+                        pendingGamepadMode = mode.id
+                        showGamepadGuide = true
+                    }
+                    animate -> modePicker.beginOpening(modePicker.modes.indexOf(mode))
+                    else -> {
+                        modePicker.dismiss()
+                        preselectMode(mode)
+                        isKeyboardActive = true
+                    }
+                }
+            }
 
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .navigationBarsPadding(),
-                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Unified Top Scan & Status Card
-                            item {
-                                StatusHeaderCard(
-                                    bluetoothState = btState,
-                                    hidLifecycleState = homeUiState.hidLifecycleState,
-                                    isScanning = isScanning,
-                                    onToggleScan = {
-                                        if (isScanning) btManager.stopScanning() else btManager.startScanning()
-                                    },
-                                    onRestartHid = btManager::restartHidService
-                                )
-                            }
-
-                            if (showTroubleshootingNudge) {
-                                item {
-                                    TroubleshootingNudgeCard(
-                                        offerSettingsPairingHelp = offerSettingsPairingHelp,
-                                        onScan = { btManager.startScanning() },
-                                        onOpenHelp = {
-                                            context.startActivity(Intent(context, HelpActivity::class.java))
-                                        },
-                                        onDismiss = {
-                                            showTroubleshootingNudge = false
-                                            sharedPrefs.edit { putBoolean("mock_troubleshooting_nudge", false) }
-                                        },
+            // The picker sits over the whole screen, top bar included, so its dimming and
+            // the opening wave cover everything.
+            Box(Modifier.fillMaxSize()) {
+                // Configuration & Setup Portrait Screen
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = stringResource(id = R.string.app_name),
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        modifier = Modifier.clickable {
+                                            easterEggClicks++
+                                            if (easterEggClicks < 5) {
+                                                android.widget.Toast.makeText(context, "${5 - easterEggClicks} more clicks to activate", android.widget.Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                easterEggClicks = 0
+                                                val intent = Intent(Intent.ACTION_VIEW, "https://www.youtube.com/watch?v=dQw4w9WgXcQ".toUri())
+                                                context.startActivity(intent)
+                                            }
+                                        }
                                     )
                                 }
+                            },
+                            actions = {
+                                IconButton(onClick = { 
+                                    context.startActivity(Intent(context, dev.arnv.bluke.SettingsActivity::class.java))
+                                }) {
+                                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                }
                             }
-
-                            DeviceListSection(
-                                bluetoothState = btState,
-                                statusMessage = btMessage,
-                                connectedDevice = connectedDeviceState,
-                                connectionTargetAddress = homeUiState.connectionTargetAddress,
-                                bondedDevices = bondedDevices,
-                                scannedDevices = scannedDevices,
-                                isScanning = isScanning,
-                                showMacAddress = showMacAddress,
-                                hideUnknownDevices = hideUnknownDevices,
-                                hideUnsupportedDevices = hideUnsupportedDevices,
-                                isPairedExpanded = isPairedExpanded,
-                                isDiscoveredExpanded = isDiscoveredExpanded,
-                                onPairedExpandedChange = { isPairedExpanded = it },
-                                onDiscoveredExpandedChange = { isDiscoveredExpanded = it },
-                                onConnect = { device ->
-                                    connectionAttempts += 1
-                                    if (shouldOfferConnectionHelp(connectionAttempts = connectionAttempts)) {
-                                        showTroubleshootingNudge = true
-                                    }
-                                    btManager.connectDevice(device)
-                                },
-                                onDisconnect = btManager::disconnectDevice
-                            )
-                        }
+                        )
                     }
-
-                    // Sticky Launch Button
-                    if (!btState.blocksInputLaunch()) Box(
+                ) { innerPadding ->
+                    // Immersive Hub UI
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
-                                )
-                            )
-                            .navigationBarsPadding()
-                            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 24.dp)
+                            .fillMaxSize()
+                            .padding(top = innerPadding.calculateTopPadding())
+                            .background(MaterialTheme.colorScheme.background)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        if (btState.blocksInputLaunch()) {
+                            ProfileNotSupportedScreen(
+                                bluetoothState = btState,
+                                onEnableBluetooth = {
+                                    btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                                },
+                                onRetry = btManager::retryBluetoothCapabilities
+                            )
+                        } else {
+                            var isPairedExpanded by rememberSaveable { mutableStateOf(true) }
+                            var isDiscoveredExpanded by rememberSaveable { mutableStateOf(true) }
+                            val connectedDeviceState = homeUiState.connectedDevice
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .navigationBarsPadding(),
+                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Unified Top Scan & Status Card
+                                item {
+                                    StatusHeaderCard(
+                                        bluetoothState = btState,
+                                        hidLifecycleState = homeUiState.hidLifecycleState,
+                                        isScanning = isScanning,
+                                        onToggleScan = {
+                                            if (isScanning) btManager.stopScanning() else btManager.startScanning()
+                                        },
+                                        onRestartHid = btManager::restartHidService
+                                    )
+                                }
+
+                                if (showTroubleshootingNudge) {
+                                    item {
+                                        TroubleshootingNudgeCard(
+                                            offerSettingsPairingHelp = offerSettingsPairingHelp,
+                                            onScan = { btManager.startScanning() },
+                                            onOpenHelp = {
+                                                context.startActivity(Intent(context, HelpActivity::class.java))
+                                            },
+                                            onDismiss = {
+                                                showTroubleshootingNudge = false
+                                                sharedPrefs.edit { putBoolean("mock_troubleshooting_nudge", false) }
+                                            },
+                                        )
+                                    }
+                                }
+
+                                DeviceListSection(
+                                    bluetoothState = btState,
+                                    statusMessage = btMessage,
+                                    connectedDevice = connectedDeviceState,
+                                    connectionTargetAddress = homeUiState.connectionTargetAddress,
+                                    bondedDevices = bondedDevices,
+                                    scannedDevices = scannedDevices,
+                                    isScanning = isScanning,
+                                    showMacAddress = showMacAddress,
+                                    hideUnknownDevices = hideUnknownDevices,
+                                    hideUnsupportedDevices = hideUnsupportedDevices,
+                                    isPairedExpanded = isPairedExpanded,
+                                    isDiscoveredExpanded = isDiscoveredExpanded,
+                                    onPairedExpandedChange = { isPairedExpanded = it },
+                                    onDiscoveredExpandedChange = { isDiscoveredExpanded = it },
+                                    onConnect = { device ->
+                                        connectionAttempts += 1
+                                        if (shouldOfferConnectionHelp(connectionAttempts = connectionAttempts)) {
+                                            showTroubleshootingNudge = true
+                                        }
+                                        btManager.connectDevice(device)
+                                    },
+                                    onDisconnect = btManager::disconnectDevice
+                                )
+                            }
+                        }
+
+                        // Sticky Launch Button
+                        if (!btState.blocksInputLaunch()) Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
+                                    )
+                                )
+                                .navigationBarsPadding()
+                                .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 24.dp)
                         ) {
-                            // Circular Mode Toggle Indicator Button
-                            IconButton(
-                                onClick = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Mode button: a tap cycles the enabled modes, holding it opens the mode picker.
+                                fun cycleInputMode() {
                                     val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
                                     val currentIndex = enabledModes.indexOf(launchMode).coerceAtLeast(0)
-                                    val nextMode = enabledModes[(currentIndex + 1) % enabledModes.size]
-                                    launchMode = nextMode
-                                    sharedPrefs.edit { putInt("launch_mode", nextMode) }
+                                    preselectMode(InputMode.fromId(enabledModes[(currentIndex + 1) % enabledModes.size]))
                                     if (isHapticsEnabled) {
                                         view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                                     }
-                                },
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                                    .testTag("mode_toggle_btn")
-                            ) {
-                                val modeIcon = when (launchMode) {
-                                    1 -> Icons.Default.Mouse
-                                    2 -> Icons.Default.SportsEsports
-                                    4 -> Icons.Filled.SmartDisplay
-                                    else -> Icons.Default.Keyboard
                                 }
-                                Icon(
-                                    imageVector = modeIcon,
-                                    contentDescription = "Cycle Input Mode",
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.size(26.dp)
+                                val modeButtonScale by animateFloatAsState(
+                                    targetValue = if (modePicker.pressed && !modePicker.visible) 0.9f else 1f,
+                                    animationSpec = spring(dampingRatio = 0.5f, stiffness = 500f),
+                                    label = "modeButtonScale",
                                 )
-                            }
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .graphicsLayer {
+                                            scaleX = modeButtonScale
+                                            scaleY = modeButtonScale
+                                        }
+                                        // The drag starts near the left edge, where Android's back gesture lives.
+                                        .systemGestureExclusion()
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                                        .semantics(mergeDescendants = true) {
+                                            role = Role.Button
+                                            contentDescription = "Input mode: ${currentInputMode.displayName}"
+                                            onClick(label = "Next input mode") { cycleInputMode(); true }
+                                            onLongClick(label = "Choose input mode") {
+                                                modePicker.showMenu(modePickerOrder(currentInputMode))
+                                                true
+                                            }
+                                            customActions = InputMode.entries.map { mode ->
+                                                CustomAccessibilityAction("Open ${mode.displayName}") {
+                                                    openModeFromPicker(mode, animate = false)
+                                                    true
+                                                }
+                                            }
+                                        }
+                                        .modePickerTrigger(
+                                            state = modePicker,
+                                            order = { modePickerOrder(InputMode.fromId(launchMode)) },
+                                            onTap = ::cycleInputMode,
+                                            onShown = { pickerFeedback(ModePickerFeedback.Shown) },
+                                            onTargetChanged = { from, to ->
+                                                modePickerTransitionFeedback(from, to)?.let(::pickerFeedback)
+                                            },
+                                            onRelease = { release ->
+                                                when (release) {
+                                                    ModePickerRelease.StayOpen -> modePicker.showMenu()
+                                                    ModePickerRelease.Cancel -> modePicker.dismiss()
+                                                    is ModePickerRelease.Preselect -> {
+                                                        preselectMode(modePicker.modes[release.index])
+                                                        pickerFeedback(ModePickerFeedback.Confirm)
+                                                        modePicker.dismiss()
+                                                    }
+                                                    is ModePickerRelease.Open -> openModeFromPicker(modePicker.modes[release.index], animate = true)
+                                                }
+                                            },
+                                        )
+                                        .testTag("mode_toggle_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = previewInputMode.icon,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
 
-                            // Dynamic Launch Option button
-                            Button(
-                                onClick = {
-                                    if (shouldShowGamepadGuide(launchMode, sharedPrefs.getBoolean("has_seen_gamepad_guide", false))) {
-                                        showGamepadGuide = true
-                                    } else {
-                                        isKeyboardActive = true
+                                // Dynamic Launch Option button
+                                Button(
+                                    onClick = {
+                                        lastSession.fromLaunchButton = true
+                                        if (shouldShowGamepadGuide(launchMode, sharedPrefs.getBoolean("has_seen_gamepad_guide", false))) {
+                                            showGamepadGuide = true
+                                        } else {
+                                            modePicker.launch(
+                                                currentInputMode,
+                                                ModeWaveOrigin.Point(lastSession.launchButtonCenter),
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(64.dp)
+                                        .onGloballyPositioned { lastSession.launchButtonCenter = it.boundsInRoot().center }
+                                        .testTag("start_keyboard_btn"),
+                                    shape = CircleShape,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    // Follows the mode picker's finger, so a preselect is visible before letting go.
+                                    val launchText = when (previewInputMode.id) {
+                                        1 -> "Launch Touchpad"
+                                        2 -> "Launch Gamepad"
+                                        4 -> "Launch Multimedia"
+                                        else -> "Launch Keyboard"
                                     }
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(64.dp)
-                                    .testTag("start_keyboard_btn"),
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                val launchText = when (launchMode) {
-                                    1 -> "Launch Touchpad"
-                                    2 -> "Launch Gamepad"
-                                    4 -> "Launch Multimedia"
-                                    else -> "Launch Keyboard"
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowUp,
+                                        contentDescription = "Launch Icon",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = launchText,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowUp,
-                                    contentDescription = "Launch Icon",
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = launchText,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
                             }
                         }
-                    }
 
+
+                }
             }
-        }
+
+                if (!btState.blocksInputLaunch()) ModePickerOverlay(
+                    state = modePicker,
+                    currentMode = currentInputMode,
+                    onDismiss = modePicker::dismiss,
+                    onMenuOpen = { index -> openModeFromPicker(modePicker.modes[index], animate = true) },
+                )
+
+                ModeWaveOverlay(
+                    state = modePicker,
+                    // The background each session opens on: the keyboard's case, else the dark surface.
+                    revealColor = { mode ->
+                        if (mode == InputMode.KEYBOARD) Color(selectedKeyboardTheme.caseArgb) else Color(0xFF141218)
+                    },
+                    onCovered = { mode ->
+                        // The fill stays up while the session fades in; dropping it now would flash.
+                        preselectMode(mode)
+                        isKeyboardActive = true
+                    },
+                )
+            }
     }
 }
 
@@ -1535,4 +1666,11 @@ private tailrec fun Context.findHardwareKeyHost(): HardwareKeyHost? = when (this
     is HardwareKeyHost -> this
     is ContextWrapper -> if (baseContext === this) null else baseContext.findHardwareKeyHost()
     else -> null
+}
+
+/** Plain memory of the last session, kept across the home screen leaving and coming back. */
+private class LastSession {
+    var mode: InputMode? = null
+    var fromLaunchButton = false
+    var launchButtonCenter = Offset.Unspecified
 }
