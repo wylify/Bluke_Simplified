@@ -1,0 +1,5 @@
+• Hold the mode button to pick a mode: slide sideways to choose, slide up to open
+• A quick flick reaches any mode; let go on the button to cancel
+• New opening and closing animation for every mode
+• See what's new in the app after each update; full changelog under About
+• Gamepad and Multimedia now follow your wallpaper or accent colors
