@@ -3,6 +3,16 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [1.2.0] - 2026-11-18
+
+### Added
+- **Pick a mode by sliding:** Hold the round mode button next to Launch and all four modes pop up above it, with the current one right above your finger. Slide sideways to choose a mode (the Launch button follows along), or slide up onto an icon and let go to open it straight away. A quick flick towards an icon is enough. Let go back on the button, or pull down, to cancel. If you hold without moving, the modes stay open so you can tap one. A short tap still switches to the next mode as before.
+- **Opening and closing animation:** Opening a mode, from the mode picker or the Launch button, spreads a dark wave across the screen from where you tapped. Closing the mode shrinks it back into the same button.
+- **What's new in the app:** After an update, Simply Bluke shows what changed since the version you last used. About → **Changelog** now opens the full history in the app.
+
+### Improved & Fixed
+- **Gamepad and Multimedia follow the app's colors:** Both screens now take their colors from your wallpaper or chosen accent, in a dark style, instead of fixed greys. Gamepad buttons light up in the accent color when pressed, and Multimedia groups its buttons by color: volume, tracks, play, and slides.
+
 ## [1.1.9] - 2026-11-16
 
 ### Added
